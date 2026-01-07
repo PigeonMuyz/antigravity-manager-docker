@@ -14,7 +14,7 @@ services:
       # noVNC - bind to localhost only for security
       - "127.0.0.1:6080:6080"
       # API proxy - can be exposed to other services
-      - "8045:8045"
+      - "28890:8045"
     volumes:
       # Persist configuration and account data
       - antigravity-data:/root/.antigravity_tools
@@ -24,6 +24,8 @@ services:
       # Timezone
       - TZ=Asia/Shanghai
     restart: unless-stopped
+    # Memory limit
+    mem_limit: 1g
     # Security options for running GUI applications
     security_opt:
       - seccomp:unconfined

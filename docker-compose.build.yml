@@ -28,6 +28,8 @@ services:
       # Timezone
       - TZ=Asia/Shanghai
     restart: unless-stopped
+    # Memory limit
+    mem_limit: 1g
     # Security options for running GUI applications
     security_opt:
       - seccomp:unconfined
