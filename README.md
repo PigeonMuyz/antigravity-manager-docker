@@ -43,13 +43,13 @@ docker run -d \
   guguchen/antigravity-tools:latest
 ```
 
-### 方式二：Docker Compose 部署
+### 方式二：Docker Compose 部署（推荐）
 
 ```bash
 # 下载 docker-compose.yml
 curl -O https://raw.githubusercontent.com/PigeonMuyz/antigravity-manager-docker/main/docker-compose.yml
 
-# 根据需要修改端口映射后启动
+# 启动（使用 Docker Hub 镜像）
 docker compose up -d
 ```
 
@@ -66,8 +66,8 @@ cd antigravity-manager-docker
 # 或 AMD64 (Intel/AMD)
 ./build-amd64.sh
 
-# 启动
-docker compose up -d
+# 使用本地构建的镜像启动
+docker compose -f docker-compose.build.yml up -d
 ```
 
 ---

@@ -1,14 +1,18 @@
 # =============================================================================
-# Docker Compose for Antigravity Tools (Using Docker Hub Image)
+# Docker Compose for Antigravity Tools (Local Build)
 # =============================================================================
-# Usage: docker compose up -d
-# VNC: http://localhost:6080 (NOT recommended to expose to public)
-# API: http://localhost:8045
+# Usage: docker compose -f docker-compose.build.yml up -d --build
 # =============================================================================
 
 services:
   antigravity:
-    image: guguchen/antigravity-tools:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Change to amd64 for Intel/AMD systems
+        TARGETARCH: arm64
+    image: antigravity-tools:local
     container_name: antigravity-tools
     ports:
       # noVNC - bind to localhost only for security
