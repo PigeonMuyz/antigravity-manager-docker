@@ -106,5 +106,5 @@ jobs:
             org.opencontainers.image.description=Docker container for Antigravity Tools with Web VNC
             org.opencontainers.image.version=${{ needs.check-version.outputs.version }}
             org.opencontainers.image.source=https://github.com/lbjlaq/Antigravity-Manager
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Disable cache to ensure fresh AppImage download from GitHub
+          no-cache: true
