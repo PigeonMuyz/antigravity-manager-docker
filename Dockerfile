@@ -42,6 +42,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dbus-x11 \
     libfuse2 \
     jq \
+    # squashfs-tools for extracting AppImage (works in QEMU emulation)
+    squashfs-tools \
     # Process management
     supervisor \
     # Fonts - use lighter alternative (only ~5MB vs 100MB+ for noto-cjk)
@@ -76,11 +78,11 @@ RUN mkdir -p /opt/antigravity && \
     # Download AppImage
     wget -q "${DOWNLOAD_URL}" -O /opt/antigravity/antigravity.AppImage && \
     chmod +x /opt/antigravity/antigravity.AppImage && \
-    # Extract immediately and cleanup
+    # Extract using unsquashfs (works in QEMU emulation, doesn't need FUSE)
     cd /opt/antigravity && \
-    ./antigravity.AppImage --appimage-extract && \
+    OFFSET=$(grep -aobm1 'hsqs' antigravity.AppImage | cut -d: -f1) && \
+    unsquashfs -offset $OFFSET -d app antigravity.AppImage && \
     rm antigravity.AppImage && \
-    mv squashfs-root app && \
     # Remove unnecessary files from extracted app
     rm -rf app/usr/share/doc app/usr/share/man 2>/dev/null || true
 
