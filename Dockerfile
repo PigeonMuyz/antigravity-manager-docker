@@ -42,6 +42,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dbus-x11 \
     libfuse2 \
     jq \
+    # squashfs-tools for extracting AppImage (needed for QEMU cross-arch builds)
+    squashfs-tools \
+    # Python for reliable offset detection
+    python3 \
     # Process management
     supervisor \
     # Fonts - use lighter alternative (only ~5MB vs 100MB+ for noto-cjk)
@@ -76,13 +80,29 @@ RUN mkdir -p /opt/antigravity && \
     # Download AppImage
     wget -q "${DOWNLOAD_URL}" -O /opt/antigravity/antigravity.AppImage && \
     chmod +x /opt/antigravity/antigravity.AppImage && \
-    # Extract using AppImage's built-in extraction (more reliable than unsquashfs offset detection)
     cd /opt/antigravity && \
-    # Set APPIMAGE_EXTRACT_AND_RUN to avoid FUSE dependency in container builds
-    APPIMAGE_EXTRACT_AND_RUN=1 ./antigravity.AppImage --appimage-extract && \
-    # Rename extracted directory to 'app'
-    mv squashfs-root app && \
+    # Try AppImage self-extraction first (works on native arch)
+    # If it fails (e.g., QEMU cross-arch build), fallback to unsquashfs with precise offset detection
+    (APPIMAGE_EXTRACT_AND_RUN=1 ./antigravity.AppImage --appimage-extract 2>/dev/null && \
+     mv squashfs-root app) || \
+    (echo "AppImage extraction failed, using unsquashfs fallback..." && \
+     # Use Python for reliable SquashFS magic number detection (0x73717368 = 'hsqs')
+     OFFSET=$(python3 -c "
+import sys
+with open('antigravity.AppImage', 'rb') as f:
+    data = f.read()
+    # Search for SquashFS magic number 'hsqs' (little-endian: 0x73717368)
+    magic = b'hsqs'
+    offset = data.find(magic)
+    if offset == -1:
+        sys.exit(1)
+    print(offset)
+") && \
+     echo "Found SquashFS at offset: ${OFFSET}" && \
+     unsquashfs -offset ${OFFSET} -d app antigravity.AppImage) && \
     rm antigravity.AppImage && \
+    # Verify extraction succeeded
+    test -f app/AppRun && echo "AppImage extraction successful!" && \
     # Remove unnecessary files from extracted app
     rm -rf app/usr/share/doc app/usr/share/man 2>/dev/null || true
 
