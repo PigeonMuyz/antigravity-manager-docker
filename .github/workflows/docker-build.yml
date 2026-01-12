@@ -11,12 +11,7 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      force_build:
-        description: 'Force build even if version exists'
-        required: false
-        default: 'false'
-        type: boolean
+    # Manual trigger: skip version check, build with timestamp tag
   schedule:
     # Check for new releases every hour
     - cron: '0 * * * *'
@@ -50,17 +45,23 @@ jobs:
       - name: Check if version already exists on Docker Hub
         id: check
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          FORCE="${{ github.event.inputs.force_build }}"
-          
-          # For push events or force build, always build
-          if [ "${{ github.event_name }}" == "push" ] || [ "$FORCE" == "true" ]; then
+          # For manual workflow_dispatch, always build (skip version check)
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "should_build=true" >> $GITHUB_OUTPUT
-            echo "Build triggered by push or force flag"
+            echo "Manual trigger: skip version check, force build"
             exit 0
           fi
           
-          # Check if tag exists on Docker Hub
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # For push events, always build
+          if [ "${{ github.event_name }}" == "push" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "Build triggered by push"
+            exit 0
+          fi
+          
+          # For schedule: check if tag exists on Docker Hub
           TOKEN=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_NAME }}:pull" | jq -r '.token')
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" \
             "https://registry-1.docker.io/v2/${{ env.IMAGE_NAME }}/manifests/${VERSION}")
@@ -102,15 +103,18 @@ jobs:
       - name: Prepare tags
         id: tags
         run: |
-          # Base tags: latest and version
+          # Always include latest tag
           TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.check-version.outputs.version }}"
           
-          # For manual workflow_dispatch, add timestamp tag to avoid cache issues
+          # For manual workflow_dispatch: use timestamp tag only (no version tag)
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             TIMESTAMP_TAG="${{ needs.check-version.outputs.timestamp }}"
             TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TIMESTAMP_TAG}"
-            echo "Adding timestamp tag for manual build: ${TIMESTAMP_TAG}"
+            echo "Manual build: using timestamp tag ${TIMESTAMP_TAG}"
+          else
+            # For auto triggers (push/schedule): use version tag
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.check-version.outputs.version }}"
+            echo "Auto build: using version tag ${{ needs.check-version.outputs.version }}"
           fi
           
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
