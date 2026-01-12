@@ -86,18 +86,8 @@ RUN mkdir -p /opt/antigravity && \
     (APPIMAGE_EXTRACT_AND_RUN=1 ./antigravity.AppImage --appimage-extract 2>/dev/null && \
      mv squashfs-root app) || \
     (echo "AppImage extraction failed, using unsquashfs fallback..." && \
-     # Use Python for reliable SquashFS magic number detection (0x73717368 = 'hsqs')
-     OFFSET=$(python3 -c "
-import sys
-with open('antigravity.AppImage', 'rb') as f:
-    data = f.read()
-    # Search for SquashFS magic number 'hsqs' (little-endian: 0x73717368)
-    magic = b'hsqs'
-    offset = data.find(magic)
-    if offset == -1:
-        sys.exit(1)
-    print(offset)
-") && \
+     # Use Python for reliable SquashFS magic number detection
+     OFFSET=$(python3 -c "import sys; f=open('antigravity.AppImage','rb'); d=f.read(); o=d.find(b'hsqs'); print(o) if o!=-1 else sys.exit(1)") && \
      echo "Found SquashFS at offset: ${OFFSET}" && \
      unsquashfs -offset ${OFFSET} -d app antigravity.AppImage) && \
     rm antigravity.AppImage && \
