@@ -31,7 +31,15 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       should_build: ${{ steps.check.outputs.should_build }}
+      timestamp: ${{ steps.timestamp.outputs.timestamp }}
     steps:
+      - name: Generate timestamp for manual builds
+        id: timestamp
+        run: |
+          # Generate timestamp tag: vYYYY-MM-DDHHmmss
+          TIMESTAMP=$(date -u +"v%Y-%m-%d%H%M%S")
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "Generated timestamp tag: ${TIMESTAMP}"
       - name: Get latest Antigravity version
         id: version
         run: |
@@ -91,6 +99,23 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Prepare tags
+        id: tags
+        run: |
+          # Base tags: latest and version
+          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.check-version.outputs.version }}"
+          
+          # For manual workflow_dispatch, add timestamp tag to avoid cache issues
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TIMESTAMP_TAG="${{ needs.check-version.outputs.timestamp }}"
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TIMESTAMP_TAG}"
+            echo "Adding timestamp tag for manual build: ${TIMESTAMP_TAG}"
+          fi
+          
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "Final tags: ${TAGS}"
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
@@ -98,9 +123,7 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.check-version.outputs.version }}
+          tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.title=Antigravity Tools
             org.opencontainers.image.description=Docker container for Antigravity Tools with Web VNC
