@@ -67,32 +67,51 @@ RUN mkdir -p /opt/antigravity && \
         "arm64") echo "aarch64" ;; \
         "amd64"|*) echo "amd64" ;; \
     esac) && \
+    echo "Target architecture: ${APPIMAGE_ARCH}" && \
     # Fetch latest release info from GitHub API
     echo "Fetching latest release from GitHub..." && \
-    RELEASE_INFO=$(curl -s "https://api.github.com/repos/lbjlaq/Antigravity-Manager/releases/latest") && \
-    VERSION=$(echo "$RELEASE_INFO" | jq -r '.tag_name' | sed 's/^v//') && \
+    RELEASE_INFO=$(curl -sS --retry 3 --retry-delay 5 "https://api.github.com/repos/lbjlaq/Antigravity-Manager/releases/latest") && \
+    # Extract version using grep (more portable than jq)
+    VERSION=$(echo "$RELEASE_INFO" | grep -o '"tag_name": *"[^"]*"' | head -1 | sed 's/.*"v\?\([^"]*\)".*/\1/') && \
+    # Validate VERSION is not empty
+    if [ -z "$VERSION" ]; then \
+        echo "ERROR: Failed to fetch version from GitHub API" && \
+        echo "API Response (first 500 chars): $(echo "$RELEASE_INFO" | head -c 500)" && \
+        exit 1; \
+    fi && \
     echo "Latest version: ${VERSION}" && \
     # Save version for labels
     echo "${VERSION}" > /opt/antigravity/VERSION && \
     # Construct download URL
     DOWNLOAD_URL="https://github.com/lbjlaq/Antigravity-Manager/releases/download/v${VERSION}/Antigravity.Tools_${VERSION}_${APPIMAGE_ARCH}.AppImage" && \
     echo "Downloading: ${DOWNLOAD_URL}" && \
-    # Download AppImage
-    wget -q "${DOWNLOAD_URL}" -O /opt/antigravity/antigravity.AppImage && \
+    # Download AppImage with retry and fail on error
+    wget --retry-connrefused --waitretry=5 --tries=3 -q "${DOWNLOAD_URL}" -O /opt/antigravity/antigravity.AppImage && \
+    # Verify download succeeded
+    if [ ! -f /opt/antigravity/antigravity.AppImage ] || [ ! -s /opt/antigravity/antigravity.AppImage ]; then \
+        echo "ERROR: Download failed or file is empty" && exit 1; \
+    fi && \
     chmod +x /opt/antigravity/antigravity.AppImage && \
+    echo "Download successful: $(ls -lh /opt/antigravity/antigravity.AppImage)" && \
     cd /opt/antigravity && \
     # Try AppImage self-extraction first (works on native arch)
     # If it fails (e.g., QEMU cross-arch build), fallback to unsquashfs with precise offset detection
     (APPIMAGE_EXTRACT_AND_RUN=1 ./antigravity.AppImage --appimage-extract 2>/dev/null && \
-     mv squashfs-root app) || \
-    (echo "AppImage extraction failed, using unsquashfs fallback..." && \
+     mv squashfs-root app && echo "AppImage self-extraction successful!") || \
+    (echo "AppImage self-extraction failed, using unsquashfs fallback..." && \
      # Use Python for reliable SquashFS magic number detection
      OFFSET=$(python3 -c "import sys; f=open('antigravity.AppImage','rb'); d=f.read(); o=d.find(b'hsqs'); print(o) if o!=-1 else sys.exit(1)") && \
      echo "Found SquashFS at offset: ${OFFSET}" && \
-     unsquashfs -offset ${OFFSET} -d app antigravity.AppImage) && \
-    rm antigravity.AppImage && \
+     unsquashfs -offset ${OFFSET} -d app antigravity.AppImage && \
+     echo "unsquashfs extraction successful!") && \
+    rm -f antigravity.AppImage && \
     # Verify extraction succeeded
-    test -f app/AppRun && echo "AppImage extraction successful!" && \
+    if [ ! -f app/AppRun ]; then \
+        echo "ERROR: Extraction failed - app/AppRun not found" && \
+        ls -la app/ 2>/dev/null || echo "app/ directory does not exist" && \
+        exit 1; \
+    fi && \
+    echo "AppImage extraction verified successfully!" && \
     # Remove unnecessary files from extracted app
     rm -rf app/usr/share/doc app/usr/share/man 2>/dev/null || true
 
