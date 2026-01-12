@@ -18,8 +18,8 @@ on:
         default: 'false'
         type: boolean
   schedule:
-    # Check for new releases every day at 8:00 UTC (16:00 Beijing time)
-    - cron: '0 8 * * *'
+    # Check for new releases every hour
+    - cron: '0 * * * *'
 
 env:
   REGISTRY: docker.io
